@@ -30,6 +30,15 @@ describe("detectVenture", () => {
     expect(result).toBe(Venture.SMART_COLLEGE);
   });
 
+  it("detects Smart College by sender domain from RFC 5322 formatted address", () => {
+    const result = detectVenture({
+      inboxEmail: "leekenick@gmail.com",
+      senderEmail: "Student Name <student@smartcollege.com>",
+      clientGroupVenture: null,
+    });
+    expect(result).toBe(Venture.SMART_COLLEGE);
+  });
+
   it("detects Smart College by client group association", () => {
     const result = detectVenture({
       inboxEmail: "leekenick@gmail.com",
