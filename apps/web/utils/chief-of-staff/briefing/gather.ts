@@ -7,6 +7,7 @@ import { CALENDAR_IDS, TIMEZONE } from "@/utils/chief-of-staff/types";
 import { createScopedLogger } from "@/utils/logger";
 import type {
   CalendarEvent,
+  ClaudeNewsItem,
   GatheredData,
   GmailThread,
   WeatherData,
@@ -144,19 +145,23 @@ export async function gatherBriefingData(clients: {
     minute: "2-digit",
   });
 
-  const [calendarResult, gmailResult, weatherResult] = await Promise.allSettled(
-    [
+  const [calendarResult, gmailResult, weatherResult, claudeNewsResult] =
+    await Promise.allSettled([
       gatherCalendar(clients.calendar),
       gatherGmail(clients.gmail),
       gatherWeather(),
-    ],
-  );
+      gatherClaudeNews(),
+    ]);
 
   return {
     calendar:
       calendarResult.status === "fulfilled"
         ? { status: "ok", events: calendarResult.value }
         : { status: "failed", error: String(calendarResult.reason) },
+    claudeNews:
+      claudeNewsResult.status === "fulfilled"
+        ? { status: "ok", items: claudeNewsResult.value }
+        : { status: "failed", error: String(claudeNewsResult.reason) },
     gmail:
       gmailResult.status === "fulfilled"
         ? { status: "ok", threads: gmailResult.value }
@@ -272,6 +277,63 @@ async function gatherGmail(gmail: gmail_v1.Gmail): Promise<GmailThread[]> {
   }
 
   return threads;
+}
+
+const ANTHROPIC_NEWS_URL = "https://www.anthropic.com/news";
+
+async function gatherClaudeNews(): Promise<ClaudeNewsItem[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const res = await fetch(ANTHROPIC_NEWS_URL, { signal: controller.signal });
+    if (!res.ok) throw new Error(`Anthropic news HTTP ${res.status}`);
+
+    const html = await res.text();
+
+    const items: ClaudeNewsItem[] = [];
+    const articleRegex =
+      /<a[^>]*href="(\/news\/[^"]+)"[^>]*>[\s\S]*?<h[23][^>]*>([\s\S]*?)<\/h[23]>[\s\S]*?(?:<p[^>]*>([\s\S]*?)<\/p>)?/g;
+
+    for (
+      let match = articleRegex.exec(html);
+      match !== null && items.length < 10;
+      match = articleRegex.exec(html)
+    ) {
+      const url = `https://www.anthropic.com${match[1]}`;
+      const title = match[2].replace(/<[^>]+>/g, "").trim();
+      const description = match[3]
+        ? match[3].replace(/<[^>]+>/g, "").trim()
+        : "";
+
+      if (title) {
+        items.push({ description, title, url });
+      }
+    }
+
+    // Fallback: if regex didn't match the page structure, try a simpler pattern
+    if (items.length === 0) {
+      const simpleLinkRegex = /href="(\/news\/[^"]+)"[^>]*>[^<]*?([^<]{10,})/g;
+      for (
+        let match = simpleLinkRegex.exec(html);
+        match !== null && items.length < 10;
+        match = simpleLinkRegex.exec(html)
+      ) {
+        const title = match[2].replace(/<[^>]+>/g, "").trim();
+        if (title) {
+          items.push({
+            description: "",
+            title,
+            url: `https://www.anthropic.com${match[1]}`,
+          });
+        }
+      }
+    }
+
+    return items;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function gatherWeather(): Promise<WeatherData> {

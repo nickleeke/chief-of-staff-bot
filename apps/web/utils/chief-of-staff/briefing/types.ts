@@ -21,9 +21,18 @@ export interface WeatherData {
   precipitation: number;
 }
 
+export interface ClaudeNewsItem {
+  description: string;
+  title: string;
+  url: string;
+}
+
 export interface GatheredData {
   calendar:
     | { status: "ok"; events: CalendarEvent[] }
+    | { status: "failed"; error: string };
+  claudeNews:
+    | { status: "ok"; items: ClaudeNewsItem[] }
     | { status: "failed"; error: string };
   generatedAt: string;
   gmail:

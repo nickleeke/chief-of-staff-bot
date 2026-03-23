@@ -22,18 +22,20 @@ export const GET = withError("chief-of-staff-briefing", async (request) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  await generateAndPostBriefing();
+  return Response.json({ ok: true });
+});
+
+export async function generateAndPostBriefing() {
   logger.info("Starting daily briefing generation");
 
-  // 1. Load OAuth clients and Slack credentials
   const clients = await loadClients();
 
-  // 2. Gather data in parallel
   const gatheredData = await gatherBriefingData({
     gmail: clients.gmail,
     calendar: clients.calendar,
   });
 
-  // 3. Generate briefing via Claude
   let briefingMarkdown: string;
   try {
     briefingMarkdown = await generateBriefing(gatheredData);
@@ -53,13 +55,9 @@ export const GET = withError("chief-of-staff-briefing", async (request) => {
       ],
       text: "Daily briefing generation failed",
     });
-    return Response.json(
-      { ok: false, error: "Claude generation failed" },
-      { status: 500 },
-    );
+    throw error;
   }
 
-  // 4. Format for Slack and post
   const blocks = formatBriefingForSlack(
     briefingMarkdown,
     gatheredData.generatedAt,
@@ -73,6 +71,4 @@ export const GET = withError("chief-of-staff-briefing", async (request) => {
   });
 
   logger.info("Daily briefing posted to Slack");
-
-  return Response.json({ ok: true });
-});
+}

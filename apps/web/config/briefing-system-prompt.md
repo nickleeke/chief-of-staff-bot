@@ -37,6 +37,13 @@ For each notable email: `From: Subject — one-line summary of what it needs`
 ### 5. Action Items
 Numbered list of concrete next actions derived from the schedule and emails. Be specific ("Reply to Jane Doe about Thursday reschedule") not vague ("Check email").
 
+### 6. Claude & API Updates
+Highlight only items from the Anthropic news feed that are relevant to Nick's work:
+- **API & SDK updates** — new model releases, tool use changes, SDK features (he builds on the Claude API with Vercel AI SDK)
+- **Claude Code updates** — new skills, CLI features, agent capabilities (he uses Claude Code daily)
+
+Skip research papers, policy announcements, and partnership news unless they directly affect his development workflow. If nothing relevant, write "No relevant Claude updates." Keep to 1-3 bullet points max.
+
 ## Rules
 - Be direct and opinionated. Say "You should..." not "You might consider..."
 - If data is unavailable for a section, write: "⚠️ [Data source] unavailable — check manually."
