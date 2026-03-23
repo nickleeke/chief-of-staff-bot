@@ -91,6 +91,25 @@ function formatGatheredDataForPrompt(data: GatheredData): string {
   } else {
     sections.push(`⚠️ Weather data unavailable: ${data.weather.error}`);
   }
+  sections.push("");
+
+  // Claude News
+  sections.push("## Recent Anthropic / Claude News");
+  if (data.claudeNews.status === "ok") {
+    if (data.claudeNews.items.length === 0) {
+      sections.push("No recent news found.");
+    } else {
+      for (const item of data.claudeNews.items) {
+        sections.push(`- **${item.title}**`);
+        if (item.description) {
+          sections.push(`  ${item.description}`);
+        }
+        sections.push(`  ${item.url}`);
+      }
+    }
+  } else {
+    sections.push(`⚠️ Claude news unavailable: ${data.claudeNews.error}`);
+  }
 
   return sections.join("\n");
 }
@@ -106,6 +125,7 @@ export async function generateBriefing(data: GatheredData): Promise<string> {
 
   logger.info("Generating briefing", {
     calendarStatus: data.calendar.status,
+    claudeNewsStatus: data.claudeNews.status,
     gmailStatus: data.gmail.status,
     weatherStatus: data.weather.status,
   });

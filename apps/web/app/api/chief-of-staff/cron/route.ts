@@ -4,6 +4,7 @@ import { retryFailedEmails } from "@/utils/chief-of-staff/jobs/retry-failed";
 import { postBatchSummary } from "@/utils/chief-of-staff/jobs/batch-summary";
 import { refreshSignatures } from "@/utils/chief-of-staff/jobs/refresh-signatures";
 import { refreshVipCache } from "@/utils/chief-of-staff/jobs/refresh-vip-cache";
+import { generateAndPostBriefing } from "@/app/api/chief-of-staff/briefing/route";
 
 function getCronSecret(request: Request): string | null {
   const authHeader = request.headers.get("authorization");
@@ -79,6 +80,11 @@ export async function GET(request: Request) {
     case "refresh-vip-cache": {
       const count = await refreshVipCache();
       return NextResponse.json({ refreshed: count });
+    }
+
+    case "briefing": {
+      await generateAndPostBriefing();
+      return NextResponse.json({ ok: true });
     }
 
     default:
