@@ -8,9 +8,21 @@
  * then upserts ChiefOfStaffConfig and AutonomyLevel records.
  */
 
-import { PrismaClient } from "../apps/web/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../apps/web/generated/prisma/client.ts";
 
-const prisma = new PrismaClient();
+const connectionString =
+  process.env.PREVIEW_DATABASE_URL ??
+  process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error("DATABASE_URL is required. Set it in your environment.");
+  process.exit(1);
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString }),
+});
 
 const AUTONOMY_LEVELS = [
   { category: "scheduling", mode: "auto_handle" },
