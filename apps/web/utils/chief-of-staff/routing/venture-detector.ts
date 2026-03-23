@@ -1,3 +1,4 @@
+import { extractEmailAddress } from "@/utils/email";
 import { Venture } from "../types";
 
 interface VentureInput {
@@ -21,7 +22,8 @@ export function detectVenture(input: VentureInput): Venture {
   const inboxVenture = INBOX_TO_VENTURE[input.inboxEmail.toLowerCase()];
   if (inboxVenture) return inboxVenture;
   // 2. Check sender domain
-  const senderDomain = input.senderEmail.toLowerCase().split("@")[1];
+  const cleanSender = extractEmailAddress(input.senderEmail);
+  const senderDomain = cleanSender.toLowerCase().split("@")[1];
   if (senderDomain) {
     const domainVenture = DOMAIN_TO_VENTURE[senderDomain];
     if (domainVenture) return domainVenture;

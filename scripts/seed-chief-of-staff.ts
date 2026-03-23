@@ -36,6 +36,7 @@ const INBOXES = [
     voiceTone: {
       instructions:
         "Warm but professional. First-name basis with parents. Reference the student by name.",
+      allowedDomains: ["smartcollege.com", "acuityscheduling.com"],
     },
   },
 ];
