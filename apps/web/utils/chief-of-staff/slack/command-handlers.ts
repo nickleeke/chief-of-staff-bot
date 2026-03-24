@@ -272,6 +272,12 @@ export async function handleProcessEmail(_ctx: CommandContext, query: string) {
     const { emailAccount, gmail, calendarClient, slackChannel } =
       await loadEmailAccountClients();
 
+    if (!slackChannel?.accessToken || !slackChannel?.channelId) {
+      throw new Error("No Slack channel configured for Smart College account");
+    }
+    const slackAccessToken = slackChannel.accessToken;
+    const slackChanId = slackChannel.channelId;
+
     const autonomyLevels: Record<string, AutonomyMode> = {
       ...DEFAULT_AUTONOMY_LEVELS,
     };
@@ -301,8 +307,8 @@ export async function handleProcessEmail(_ctx: CommandContext, query: string) {
 
     if (messageIds.length === 0) {
       await postToChiefOfStaff({
-        accessToken: slackChannel.accessToken,
-        channelId: slackChannel.channelId,
+        accessToken: slackAccessToken,
+        channelId: slackChanId,
         blocks: [
           {
             type: "section",
@@ -318,8 +324,8 @@ export async function handleProcessEmail(_ctx: CommandContext, query: string) {
     }
 
     await postToChiefOfStaff({
-      accessToken: slackChannel.accessToken,
-      channelId: slackChannel.channelId,
+      accessToken: slackAccessToken,
+      channelId: slackChanId,
       blocks: [
         {
           type: "header",
@@ -365,8 +371,8 @@ export async function handleProcessEmail(_ctx: CommandContext, query: string) {
     const failed = results.filter((r) => r.status === "rejected").length;
 
     await postToChiefOfStaff({
-      accessToken: slackChannel.accessToken,
-      channelId: slackChannel.channelId,
+      accessToken: slackAccessToken,
+      channelId: slackChanId,
       blocks: [
         {
           type: "section",
