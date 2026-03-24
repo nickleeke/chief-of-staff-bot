@@ -3,6 +3,7 @@ import {
   handleClient,
   handleEmail,
   handleHelp,
+  handleProcessEmail,
   handleSchedule,
 } from "./command-handlers";
 
@@ -26,6 +27,8 @@ export function routeCommand(ctx: CommandContext) {
       return handleSchedule(ctx);
     case "client":
       return handleClient(ctx, args.join(" "));
+    case "handle":
+      return handleProcessEmail(ctx, args.join(" "));
     default:
       return handleHelp(ctx);
   }

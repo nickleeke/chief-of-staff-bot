@@ -1,8 +1,18 @@
 import type { KnownBlock } from "@slack/types";
 import { createScopedLogger } from "@/utils/logger";
-import { CALENDAR_IDS, TIMEZONE } from "@/utils/chief-of-staff/types";
+import prisma from "@/utils/prisma";
+import { getGmailClientWithRefresh } from "@/utils/gmail/client";
+import { getCalendarClientWithRefresh } from "@/utils/calendar/client";
+import {
+  CALENDAR_IDS,
+  TIMEZONE,
+  DEFAULT_AUTONOMY_LEVELS,
+  AutonomyMode,
+  type CosCategory,
+} from "@/utils/chief-of-staff/types";
 import { loadClients } from "@/utils/chief-of-staff/briefing/gather";
 import { generateAndPostBriefing } from "@/app/api/chief-of-staff/briefing/route";
+import { processOneEmail } from "@/app/api/chief-of-staff/webhook/process";
 import { postToChiefOfStaff } from "./poster";
 import type { CommandContext } from "./command-router";
 
@@ -81,7 +91,7 @@ export async function handleEmail(_ctx: CommandContext) {
           headers.find((h) => h.name?.toLowerCase() === "subject")?.value ?? "";
         // Extract just the name from "Name <email>" format
         const fromName = from.replace(/<[^>]+>/, "").trim() || from;
-        sections.push(`  • ${fromName}: ${subject}`);
+        sections.push(`  â¢ ${fromName}: ${subject}`);
       }
     }
 
@@ -171,7 +181,7 @@ export async function handleSchedule(_ctx: CommandContext) {
               minute: "2-digit",
             })
           : "All day";
-        return `• *${time}* — ${e.summary} _(${e.calendarName})_`;
+        return `â¢ *${time}* â ${e.summary} _(${e.calendarName})_`;
       });
       text = lines.join("\n");
     }
@@ -252,6 +262,128 @@ export async function handleHelp(_ctx: CommandContext) {
   await postHelpToSlack();
 }
 
+export async function handleProcessEmail(_ctx: CommandContext, query: string) {
+  try {
+    if (!query) {
+      await postHelpToSlack("Usage: `/cos handle <Gmail query>`");
+      return;
+    }
+
+    const { emailAccount, gmail, calendarClient, slackChannel } =
+      await loadEmailAccountClients();
+
+    const autonomyLevels: Record<string, AutonomyMode> = {
+      ...DEFAULT_AUTONOMY_LEVELS,
+    };
+    for (const level of emailAccount.autonomyLevels) {
+      autonomyLevels[level.category] = level.mode as AutonomyMode;
+    }
+
+    const allowedDomains = extractJsonArray(
+      emailAccount.chiefOfStaffConfig?.voiceTone,
+      "allowedDomains",
+    );
+    const blockedDomains = extractJsonArray(
+      emailAccount.chiefOfStaffConfig?.voiceTone,
+      "blockedDomains",
+    );
+
+    // Search Gmail for matching messages
+    const listRes = await gmail.users.messages.list({
+      userId: "me",
+      q: query,
+      maxResults: 5,
+    });
+
+    const messageIds = (listRes.data.messages ?? [])
+      .map((m) => m.id)
+      .filter(Boolean) as string[];
+
+    if (messageIds.length === 0) {
+      await postToChiefOfStaff({
+        accessToken: slackChannel.accessToken,
+        channelId: slackChannel.channelId,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `No emails found matching query: \`${query}\``,
+            },
+          },
+        ],
+        text: `No emails found matching query: ${query}`,
+      });
+      return;
+    }
+
+    await postToChiefOfStaff({
+      accessToken: slackChannel.accessToken,
+      channelId: slackChannel.channelId,
+      blocks: [
+        {
+          type: "header",
+          text: {
+            type: "plain_text",
+            text: "Processing Emails",
+            emoji: true,
+          },
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `Found ${messageIds.length} message${messageIds.length === 1 ? "" : "s"} matching: \`${query}\``,
+          },
+        },
+      ],
+      text: `Processing ${messageIds.length} message${messageIds.length === 1 ? "" : "s"}...`,
+    });
+
+    const results = await Promise.allSettled(
+      messageIds.map((messageId) =>
+        processOneEmail({
+          messageId,
+          emailAccount: {
+            id: emailAccount.id,
+            email: emailAccount.email,
+            autonomyLevels: autonomyLevels as Record<
+              CosCategory,
+              AutonomyMode
+            >,
+          },
+          gmail,
+          calendarClient,
+          slackChannel,
+          allowedDomains,
+          blockedDomains,
+        }),
+      ),
+    );
+
+    const successful = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+
+    await postToChiefOfStaff({
+      accessToken: slackChannel.accessToken,
+      channelId: slackChannel.channelId,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*Batch Processing Complete*\nâ Processed: ${successful}\nâ Failed: ${failed}`,
+          },
+        },
+      ],
+      text: `Batch processing complete: ${successful} processed, ${failed} failed`,
+    });
+  } catch (error) {
+    logger.error("Handle command failed", { error });
+    await postErrorToSlack("handle", error);
+  }
+}
+
 async function postErrorToSlack(command: string, _error: unknown) {
   try {
     const clients = await loadClients();
@@ -263,7 +395,7 @@ async function postErrorToSlack(command: string, _error: unknown) {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `Failed to run \`/cos ${command}\` — check server logs for details.`,
+            text: `Failed to run \`/cos ${command}\` â check server logs for details.`,
           },
         },
       ],
@@ -280,11 +412,12 @@ async function postHelpToSlack(extraMessage?: string) {
     const helpText = [
       extraMessage ? `${extraMessage}\n` : "",
       "*Available commands:*",
-      "• `/cos briefing` — Generate and post daily briefing",
-      "• `/cos email` — Scan inbox and post email summary",
-      "• `/cos schedule` — Show today's calendar",
-      "• `/cos client <email>` — Look up client history and VIP status",
-      "• `/cos help` — Show this message",
+      "â¢ `/cos briefing` â Generate and post daily briefing",
+      "â¢ `/cos email` â Scan inbox and post email summary",
+      "â¢ `/cos schedule` â Show today's calendar",
+      "â¢ `/cos client <email>` â Look up client history and VIP status",
+      "â¢ `/cos handle <query>` â Search Gmail and process matching emails",
+      "â¢ `/cos help` â Show this message",
     ]
       .filter(Boolean)
       .join("\n");
@@ -303,4 +436,87 @@ async function postHelpToSlack(extraMessage?: string) {
   } catch {
     logger.error("Failed to post help to Slack");
   }
+}
+
+async function loadEmailAccountClients() {
+  const emailAccount = await prisma.emailAccount.findUnique({
+    where: { email: "nick@smartcollege.com" },
+    include: {
+      chiefOfStaffConfig: true,
+      autonomyLevels: true,
+      account: {
+        select: {
+          access_token: true,
+          refresh_token: true,
+          expires_at: true,
+        },
+      },
+      messagingChannels: {
+        where: { provider: "SLACK", isConnected: true },
+        take: 1,
+      },
+      calendarConnections: {
+        where: { provider: "google", isConnected: true },
+        take: 1,
+      },
+    },
+  });
+
+  if (!emailAccount) {
+    throw new Error("Smart College email account not found");
+  }
+
+  if (
+    !emailAccount.account?.access_token ||
+    !emailAccount.account?.refresh_token
+  ) {
+    throw new Error("Missing OAuth tokens for Smart College account");
+  }
+
+  const gmail = await getGmailClientWithRefresh({
+    accessToken: emailAccount.account.access_token,
+    refreshToken: emailAccount.account.refresh_token,
+    expiresAt: emailAccount.account.expires_at
+      ? emailAccount.account.expires_at.getTime()
+      : null,
+    emailAccountId: emailAccount.id,
+    logger,
+  });
+
+  const calendarConn = emailAccount.calendarConnections[0];
+  let calendarClient: Awaited<
+    ReturnType<typeof getCalendarClientWithRefresh>
+  > | null = null;
+  if (calendarConn?.refreshToken) {
+    try {
+      calendarClient = await getCalendarClientWithRefresh({
+        accessToken: calendarConn.accessToken,
+        refreshToken: calendarConn.refreshToken,
+        expiresAt: calendarConn.expiresAt?.getTime() ?? null,
+        emailAccountId: emailAccount.id,
+        logger,
+      });
+    } catch (err) {
+      logger.warn("Could not build calendar client", { err });
+    }
+  }
+
+  const slackChannel = emailAccount.messagingChannels[0] ?? null;
+
+  return { emailAccount, gmail, calendarClient, slackChannel };
+}
+
+function extractJsonArray(
+  json: string | null | undefined,
+  field: string,
+): string[] | undefined {
+  if (!json) return undefined;
+  try {
+    const parsed = JSON.parse(json);
+    const value = parsed[field];
+    if (Array.isArray(value)) return value;
+  } catch {
+    // voiceTone may not be valid JSON
+  }
+  return undefined;
 }
