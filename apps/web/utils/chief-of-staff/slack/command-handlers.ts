@@ -360,7 +360,7 @@ export async function handleProcessEmail(_ctx: CommandContext, query: string) {
           },
           gmail,
           calendarClient,
-          slackChannel,
+          slackChannel: { accessToken: slackAccessToken, channelId: slackChanId },
           allowedDomains,
           blockedDomains,
         }),
