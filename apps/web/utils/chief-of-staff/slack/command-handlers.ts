@@ -507,10 +507,10 @@ async function loadEmailAccountClients() {
 }
 
 function extractJsonArray(
-  json: string | null | undefined,
+  json: unknown,
   field: string,
 ): string[] | undefined {
-  if (!json) return undefined;
+  if (!json || typeof json !== "string") return undefined;
   try {
     const parsed = JSON.parse(json);
     const value = parsed[field];
