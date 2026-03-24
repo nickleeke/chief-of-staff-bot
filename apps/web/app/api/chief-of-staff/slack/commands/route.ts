@@ -9,11 +9,12 @@ const logger = createScopedLogger("cos:slash-command");
 
 const HELP_TEXT = [
   "*Available commands:*",
-  "• `/cos briefing` — Generate and post daily briefing",
-  "• `/cos email` — Scan inbox and post email summary",
-  "• `/cos schedule` — Show today's calendar",
-  "• `/cos client <email>` — Look up client history and VIP status",
-  "• `/cos help` — Show this message",
+  "â¢ `/cos briefing` â Generate and post daily briefing",
+  "â¢ `/cos email` â Scan inbox and post email summary",
+  "â¢ `/cos schedule` â Show today's calendar",
+  "â¢ `/cos client <email>` â Look up client history and VIP status",
+  "â¢ `/cos handle <query>` â Search Gmail and process matching emails",
+  "â¢ `/cos help` â Show this message",
 ].join("\n");
 
 export async function POST(request: Request) {
